@@ -15,7 +15,7 @@ GET /api/playlist?url=<spotify-playlist-url>
 GET /api/status
 ```
 
-Each endpoint returns JSON in a compact format:
+Search returns JSON in a compact format:
 
 ```json
 {
@@ -34,6 +34,16 @@ Each endpoint returns JSON in a compact format:
 }
 ```
 
+Playlist and album responses use the same `tracks` shape and also include `trackCount`:
+
+```json
+{
+  "name": "Random Access Memories",
+  "tracks": [],
+  "trackCount": 13
+}
+```
+
 ## How It Works
 
 The server does not use the official Spotify Client Credentials flow.
@@ -47,6 +57,8 @@ Instead, it follows the behavior of Spotify's web player:
 5. Use the token to query Spotify metadata APIs.
 
 For playlist, album, and search resolution, the server prefers Spotify's internal Pathfinder GraphQL API first. If that fails, it falls back to Spotify's public Web API where possible.
+
+Playlist and album endpoints page through Spotify results until the collection is exhausted. There is no fixed five-page cap; the endpoint keeps requesting pages until Spotify returns no `next` page or the internal API reports that all items have been read.
 
 This gives better behavior for many common playlist and search requests while keeping the public response format simple.
 
@@ -77,6 +89,7 @@ Contains the main implementation:
 - public Web API fallback
 - playlist parsing
 - album parsing
+- full playlist and album pagination
 - search parsing
 - local HTTP server support
 - Vercel-compatible request handler export
@@ -168,6 +181,8 @@ Fetches album metadata and tracks.
 
 The internal GraphQL path is tried first. If it does not return usable tracks, the server falls back to the public Web API.
 
+The endpoint paginates until the full album has been loaded.
+
 Example:
 
 ```text
@@ -183,6 +198,8 @@ GET /api/playlist?url=<spotify-playlist-url>
 Fetches playlist metadata and tracks.
 
 The internal GraphQL path is tried first. If it does not return usable tracks, the server falls back to the public Web API.
+
+The endpoint paginates until the full playlist has been loaded. Local tracks and non-track items are skipped because they do not map cleanly to Spotify track metadata.
 
 Example:
 
@@ -246,6 +263,8 @@ Serverless functions are short-lived. The token cache is stored in memory, so it
 This is acceptable for this API because the server can regenerate anonymous tokens when needed.
 
 The project avoids long waits on Spotify public API rate limits. If Spotify returns a short `Retry-After`, the server may retry briefly. Longer rate limits are returned to the caller instead of holding the Vercel function open for too long.
+
+Very large playlists can take longer to resolve because the API now loads every available page. Vercel functions are configured with a 30 second maximum duration, so extremely large playlists may still be limited by the deployment platform rather than by the code.
 
 ## License
 

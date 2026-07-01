@@ -446,25 +446,31 @@ async function fetchPlaylist(rawUrl) {
   const playlistId = parseSpotifyUrl(rawUrl, "playlist");
   const internal = await fetchPlaylistInternal(playlistId);
   if (internal.tracks.length > 0) {
-    return internal;
+    return withTrackCount(internal);
   }
 
   const playlist = await spotifyApi(`/playlists/${encodeURIComponent(playlistId)}`, {
     fields: "name",
   });
   const tracks = [];
+  const limit = 100;
 
-  for (let page = 0; page < 5; page += 1) {
+  for (let offset = 0; ; offset += limit) {
     const items = await spotifyApi(
       `/playlists/${encodeURIComponent(playlistId)}/tracks`,
       {
-        limit: 100,
-        offset: page * 100,
+        limit,
+        offset,
         additional_types: "track",
       }
     );
 
-    for (const item of items.items || []) {
+    const pageItems = items.items || [];
+    if (pageItems.length === 0) {
+      break;
+    }
+
+    for (const item of pageItems) {
       const track = item.track;
       if (!track || track.is_local || track.type !== "track") {
         continue;
@@ -477,20 +483,21 @@ async function fetchPlaylist(rawUrl) {
     }
   }
 
-  return { name: playlist.name || "Spotify Playlist", tracks };
+  return withTrackCount({ name: playlist.name || "Spotify Playlist", tracks });
 }
 
 async function fetchPlaylistInternal(playlistId) {
   const tracks = [];
   let name = "Spotify Playlist";
   let total = Infinity;
+  const limit = 100;
 
   try {
-    for (let offset = 0; offset < total && tracks.length < 500; ) {
+    for (let offset = 0; offset < total; ) {
       const data = await spotifyInternalApi(GRAPHQL_QUERIES.getPlaylist, {
         uri: `spotify:playlist:${playlistId}`,
         offset,
-        limit: 100,
+        limit,
         enableWatchFeedEntrypoint: false,
       });
 
@@ -517,7 +524,7 @@ async function fetchPlaylistInternal(playlistId) {
       }
 
       offset += items.length;
-      if (items.length < 100) {
+      if (items.length < limit) {
         break;
       }
     }
@@ -532,20 +539,26 @@ async function fetchAlbum(rawUrl) {
   const albumId = parseSpotifyUrl(rawUrl, "album");
   const internal = await fetchAlbumInternal(albumId);
   if (internal.tracks.length > 0) {
-    return internal;
+    return withTrackCount(internal);
   }
 
   const album = await spotifyApi(`/albums/${encodeURIComponent(albumId)}`);
   const tracks = [];
   const albumArtworkUrl = bestImage(album.images);
+  const limit = 50;
 
-  for (let page = 0; page < 5; page += 1) {
+  for (let offset = 0; ; offset += limit) {
     const items = await spotifyApi(`/albums/${encodeURIComponent(albumId)}/tracks`, {
-      limit: 50,
-      offset: page * 50,
+      limit,
+      offset,
     });
 
-    for (const track of items.items || []) {
+    const pageItems = items.items || [];
+    if (pageItems.length === 0) {
+      break;
+    }
+
+    for (const track of pageItems) {
       if (track?.type === "track") {
         tracks.push(mapTrack({ ...track, album }, albumArtworkUrl));
       }
@@ -557,7 +570,7 @@ async function fetchAlbum(rawUrl) {
   }
 
   await addIsrcsToTracks(tracks);
-  return { name: album.name || "Spotify Album", tracks };
+  return withTrackCount({ name: album.name || "Spotify Album", tracks });
 }
 
 async function fetchAlbumInternal(albumId) {
@@ -565,14 +578,15 @@ async function fetchAlbumInternal(albumId) {
   let name = "Spotify Album";
   let total = Infinity;
   let artworkUrl = null;
+  const limit = 300;
 
   try {
-    for (let offset = 0; offset < total && tracks.length < 250; ) {
+    for (let offset = 0; offset < total; ) {
       const data = await spotifyInternalApi(GRAPHQL_QUERIES.getAlbum, {
         uri: `spotify:album:${albumId}`,
         locale: "en",
         offset,
-        limit: 300,
+        limit,
       });
 
       const album = data?.albumUnion;
@@ -599,7 +613,7 @@ async function fetchAlbumInternal(albumId) {
       }
 
       offset += items.length;
-      if (items.length < 300) {
+      if (items.length < limit) {
         break;
       }
     }
@@ -608,6 +622,13 @@ async function fetchAlbumInternal(albumId) {
   }
 
   return { name, tracks };
+}
+
+function withTrackCount(collection) {
+  return {
+    ...collection,
+    trackCount: collection.tracks.length,
+  };
 }
 
 async function addIsrcsToTracks(tracks) {
