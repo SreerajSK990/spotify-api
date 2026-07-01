@@ -698,6 +698,24 @@ function getRequiredParam(url, name) {
   return value;
 }
 
+function getIstTimestamp(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date).map((part) => [part.type, part.value])
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+05:30`;
+}
+
 async function handleRequest(req, res) {
   const startedAt = Date.now();
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -718,6 +736,13 @@ async function handleRequest(req, res) {
     response = await fetchAlbum(getRequiredParam(url, "url"));
   } else if (url.pathname === "/api/search") {
     response = await searchTracks(getRequiredParam(url, "query"));
+  } else if (url.pathname === "/api/status") {
+    response = {
+      status: "OK",
+      timestamp: getIstTimestamp(),
+      timezone: "Asia/Kolkata",
+      offset: "+05:30",
+    };
   } else {
     throw httpError(404, "Endpoint not found");
   }

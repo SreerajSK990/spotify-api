@@ -6,12 +6,13 @@ The project is designed to run locally as a plain Node HTTP server and to deploy
 
 ## What This Project Does
 
-This API exposes three main endpoints:
+This API exposes four endpoints:
 
 ```text
 GET /api/search?query=<search-term>
 GET /api/album?url=<spotify-album-url>
 GET /api/playlist?url=<spotify-playlist-url>
+GET /api/status
 ```
 
 Each endpoint returns JSON in a compact format:
@@ -57,6 +58,7 @@ This gives better behavior for many common playlist and search requests while ke
 |   |-- album.js
 |   |-- index.js
 |   |-- playlist.js
+|   |-- status.js
 |   `-- search.js
 |-- LICENSE
 |-- readme.md
@@ -111,6 +113,7 @@ Example requests:
 http://localhost:8080/api/search?query=daft%20punk
 http://localhost:8080/api/album?url=https%3A%2F%2Fopen.spotify.com%2Falbum%2F4m2880jivSbbyEGAKfITCa
 http://localhost:8080/api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
+http://localhost:8080/api/status
 ```
 
 When passing Spotify URLs as query parameters, URL-encode them.
@@ -125,6 +128,7 @@ Deploy it as a normal Vercel project. Vercel will use the files inside `api/` as
 /api/search
 /api/album
 /api/playlist
+/api/status
 ```
 
 After deployment, your requests will look like:
@@ -133,6 +137,7 @@ After deployment, your requests will look like:
 https://your-project.vercel.app/api/search?query=daft%20punk
 https://your-project.vercel.app/api/album?url=<encoded-spotify-album-url>
 https://your-project.vercel.app/api/playlist?url=<encoded-spotify-playlist-url>
+https://your-project.vercel.app/api/status
 ```
 
 No environment variables are required for the current implementation.
@@ -183,6 +188,25 @@ Example:
 
 ```text
 /api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
+```
+
+### Status
+
+```text
+GET /api/status
+```
+
+Returns `200 OK` with the current timestamp in Indian Standard Time.
+
+Example response:
+
+```json
+{
+  "status": "OK",
+  "timestamp": "2026-07-01T22:15:30+05:30",
+  "timezone": "Asia/Kolkata",
+  "offset": "+05:30"
+}
 ```
 
 ## Error Responses

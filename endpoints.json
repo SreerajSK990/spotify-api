@@ -1,0 +1,6 @@
+{
+    "spotifyEndpoint": {
+        "baseUrl": "https://spotify-api-lime-xi.vercel.app",
+        "statusEndpoint": "https://spotify-api-lime-xi.vercel.app/api/status"
+    }
+}
