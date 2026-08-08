@@ -6,12 +6,13 @@ The project is designed to run locally as a plain Node HTTP server and to deploy
 
 ## What This Project Does
 
-This API exposes four endpoints:
+This API exposes five endpoints:
 
 ```text
 GET /api/search?query=<search-term>
 GET /api/album?url=<spotify-album-url>
 GET /api/playlist?url=<spotify-playlist-url>
+GET /api/user-playlists?userId=<spotify-user-id>
 GET /api/status
 ```
 
@@ -71,7 +72,8 @@ This gives better behavior for many common playlist and search requests while ke
 |   |-- index.js
 |   |-- playlist.js
 |   |-- status.js
-|   `-- search.js
+|   |-- search.js
+|   `-- user-playlists.js
 |-- LICENSE
 |-- readme.md
 |-- server.js
@@ -126,6 +128,7 @@ Example requests:
 http://localhost:8080/api/search?query=daft%20punk
 http://localhost:8080/api/album?url=https%3A%2F%2Fopen.spotify.com%2Falbum%2F4m2880jivSbbyEGAKfITCa
 http://localhost:8080/api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
+http://localhost:8080/api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
 http://localhost:8080/api/status
 ```
 
@@ -141,6 +144,7 @@ Deploy it as a normal Vercel project. Vercel will use the files inside `api/` as
 /api/search
 /api/album
 /api/playlist
+/api/user-playlists
 /api/status
 ```
 
@@ -150,6 +154,7 @@ After deployment, your requests will look like:
 https://your-project.vercel.app/api/search?query=daft%20punk
 https://your-project.vercel.app/api/album?url=<encoded-spotify-album-url>
 https://your-project.vercel.app/api/playlist?url=<encoded-spotify-playlist-url>
+https://your-project.vercel.app/api/user-playlists?userId=<spotify-user-id>
 https://your-project.vercel.app/api/status
 ```
 
@@ -205,6 +210,22 @@ Example:
 
 ```text
 /api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
+```
+
+### User Playlists
+
+```text
+GET /api/user-playlists?userId=<spotify-user-id>
+```
+
+Fetches a user's public playlists.
+
+This endpoint utilizes Spotify's internal spclient API to bypass public Web API restrictions for anonymous tokens.
+
+Example:
+
+```text
+/api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
 ```
 
 ### Status

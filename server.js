@@ -176,8 +176,7 @@ async function fetchAnonymousToken() {
 
   throw httpError(
     502,
-    `Failed to obtain anonymous Spotify access token${
-      lastError?.message ? `: ${lastError.message}` : ""
+    `Failed to obtain anonymous Spotify access token${lastError?.message ? `: ${lastError.message}` : ""
     }`
   );
 }
@@ -493,7 +492,7 @@ async function fetchPlaylistInternal(playlistId) {
   const limit = 100;
 
   try {
-    for (let offset = 0; offset < total; ) {
+    for (let offset = 0; offset < total;) {
       const data = await spotifyInternalApi(GRAPHQL_QUERIES.getPlaylist, {
         uri: `spotify:playlist:${playlistId}`,
         offset,
@@ -581,7 +580,7 @@ async function fetchAlbumInternal(albumId) {
   const limit = 300;
 
   try {
-    for (let offset = 0; offset < total; ) {
+    for (let offset = 0; offset < total;) {
       const data = await spotifyInternalApi(GRAPHQL_QUERIES.getAlbum, {
         uri: `spotify:album:${albumId}`,
         locale: "en",
@@ -622,6 +621,39 @@ async function fetchAlbumInternal(albumId) {
   }
 
   return { name, tracks };
+}
+
+async function fetchUserPlaylists(userId) {
+  const token = await getAccessToken();
+  const url = `https://spclient.wg.spotify.com/user-profile-view/v3/profile/${encodeURIComponent(userId)}?playlist_limit=100&artist_limit=0&episode_limit=0&market=US`;
+
+  const data = await requestJson(url, {
+    headers: {
+      "authorization": `Bearer ${token}`,
+      "accept": "application/json",
+      "app-platform": "WebPlayer"
+    }
+  });
+
+  const rawPlaylists = data.public_playlists || [];
+  const playlists = rawPlaylists.map(p => {
+    const id = (p.uri || "").replace("spotify:playlist:", "");
+    let artworkUrl = p.image_url || null;
+
+    return {
+      name: p.name,
+      identifier: id,
+      uri: p.uri,
+      url: `https://open.spotify.com/playlist/${id}`,
+      artworkUrl
+    };
+  });
+
+  return {
+    name: `Spotify Playlists for User: ${userId}`,
+    playlists,
+    playlistCount: playlists.length
+  };
 }
 
 function withTrackCount(collection) {
@@ -746,6 +778,10 @@ async function handleRequest(req, res) {
     return sendJson(res, 204, {});
   }
 
+  if (url.pathname === "/favicon.ico") {
+    return sendJson(res, 204, {});
+  }
+
   if (req.method !== "GET") {
     throw httpError(405, "Only GET requests are supported");
   }
@@ -757,6 +793,8 @@ async function handleRequest(req, res) {
     response = await fetchAlbum(getRequiredParam(url, "url"));
   } else if (url.pathname === "/api/search") {
     response = await searchTracks(getRequiredParam(url, "query"));
+  } else if (url.pathname === "/api/user-playlists") {
+    response = await fetchUserPlaylists(getRequiredParam(url, "userId"));
   } else if (url.pathname === "/api/status") {
     response = {
       status: "OK",
@@ -810,4 +848,5 @@ module.exports = {
   handleApiRequest,
   decodeSecret,
   generateTotp,
+  getAccessToken,
 };
