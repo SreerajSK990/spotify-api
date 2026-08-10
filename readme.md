@@ -6,10 +6,13 @@ The project is designed to run locally as a plain Node HTTP server and to deploy
 
 ## What This Project Does
 
-This API exposes eight endpoints:
+This API exposes eleven endpoints:
 
 ```text
 GET /api/search?query=<search-term>
+GET /api/track?url=<spotify-track-url>
+GET /api/similar-tracks?url=<spotify-track-url>[&limit=10]
+GET /api/similar-albums?url=<spotify-track-url>[&limit=10]
 GET /api/album?url=<spotify-album-url>
 GET /api/playlist?url=<spotify-playlist-url>
 GET /api/user-playlists?userId=<spotify-user-id>
@@ -78,7 +81,10 @@ This gives better behavior for many common playlist and search requests while ke
 |   |-- playlist.js
 |   |-- status.js
 |   |-- search.js
+|   |-- similar-albums.js
+|   |-- similar-tracks.js
 |   |-- home.js
+|   |-- track.js
 |   `-- user-playlists.js
 |-- LICENSE
 |-- readme.md
@@ -132,6 +138,9 @@ Example requests:
 
 ```text
 http://localhost:8080/api/search?query=daft%20punk
+http://localhost:8080/api/track?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD
+http://localhost:8080/api/similar-tracks?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD&limit=5
+http://localhost:8080/api/similar-albums?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD&limit=5
 http://localhost:8080/api/album?url=https%3A%2F%2Fopen.spotify.com%2Falbum%2F4m2880jivSbbyEGAKfITCa
 http://localhost:8080/api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
 http://localhost:8080/api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
@@ -151,6 +160,9 @@ Deploy it as a normal Vercel project. Vercel will use the files inside `api/` as
 
 ```text
 /api/search
+/api/track
+/api/similar-tracks
+/api/similar-albums
 /api/album
 /api/playlist
 /api/user-playlists
@@ -164,6 +176,9 @@ After deployment, your requests will look like:
 
 ```text
 https://your-project.vercel.app/api/search?query=daft%20punk
+https://your-project.vercel.app/api/track?url=<encoded-spotify-track-url>
+https://your-project.vercel.app/api/similar-tracks?url=<encoded-spotify-track-url>&limit=10
+https://your-project.vercel.app/api/similar-albums?url=<encoded-spotify-track-url>&limit=10
 https://your-project.vercel.app/api/album?url=<encoded-spotify-album-url>
 https://your-project.vercel.app/api/playlist?url=<encoded-spotify-playlist-url>
 https://your-project.vercel.app/api/user-playlists?userId=<spotify-user-id>
@@ -189,6 +204,48 @@ Example:
 
 ```text
 /api/search?query=daft%20punk
+```
+
+### Track
+
+```text
+GET /api/track?url=<spotify-track-url>
+```
+
+Fetches detailed metadata for a single track, including duration, artwork, artists, and ISRC.
+
+Example:
+
+```text
+/api/track?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD
+```
+
+### Similar Tracks
+
+```text
+GET /api/similar-tracks?url=<spotify-track-url>[&limit=10]
+```
+
+Fetches recommended similar tracks based on a given track (like Spotify Radio). Returns up to the specified limit (default 10).
+
+Example:
+
+```text
+/api/similar-tracks?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD&limit=5
+```
+
+### Similar Albums
+
+```text
+GET /api/similar-albums?url=<spotify-track-url>[&limit=10]
+```
+
+Fetches recommended similar albums based on a given track. Returns up to the specified limit (default 10).
+
+Example:
+
+```text
+/api/similar-albums?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD&limit=5
 ```
 
 ### Album

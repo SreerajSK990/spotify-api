@@ -43,6 +43,18 @@ const GRAPHQL_QUERIES = {
     name: "home",
     hash: "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a",
   },
+  getTrack: {
+    name: "getTrack",
+    hash: "1a2f0cce77c90a4a5b1730beecc4da7e34290d684324c16663bf09a268ebce48",
+  },
+  getSimilarTracks: {
+    name: "internalLinkRecommenderTrack",
+    hash: "c77098ee9d6ee8ad3eb844938722db60570d040b49f41f5ec6e7be9160a7c86b",
+  },
+  getSimilarAlbums: {
+    name: "similarAlbumsBasedOnThisTrack",
+    hash: "1d1f93a737498adca2c892c73af87fc0b052afe4e1a33c989540c32413dfae17",
+  },
 };
 
 let cachedToken = null;
@@ -465,6 +477,109 @@ function mapInternalTrack(track, fallbackArtworkUrl = null) {
   };
 }
 
+async function fetchTrack(rawUrl) {
+  const trackId = parseSpotifyUrl(rawUrl, "track");
+  return fetchTrackInternal(trackId);
+}
+
+async function fetchTrackInternal(trackId) {
+  try {
+    const data = await spotifyInternalApi(GRAPHQL_QUERIES.getTrack, {
+      uri: `spotify:track:${trackId}`
+    });
+
+    const track = data?.trackUnion;
+    if (!track || track.__typename === "NotFound") {
+      throw httpError(404, "Track not found");
+    }
+
+    const explicit = track.contentRating?.label === "EXPLICIT" || track.explicit === true;
+    const albumName = track.albumOfTrack?.name || track.album?.name || null;
+    const albumId = track.albumOfTrack?.id || track.album?.id || null;
+    let artworkUrl = track.albumOfTrack?.coverArt?.sources?.[0]?.url || track.album?.images?.[0]?.url || null;
+    
+    if (!artworkUrl && track.coverArt?.sources?.[0]?.url) {
+      artworkUrl = track.coverArt.sources[0].url;
+    }
+
+    return {
+      title: track.name || "Unknown Track",
+      author: internalTrackAuthor(track),
+      albumName: albumName,
+      albumId: albumId,
+      duration: track.duration?.totalMilliseconds || track.trackDuration?.totalMilliseconds || 0,
+      identifier: trackId,
+      uri: `https://open.spotify.com/track/${trackId}?explicit=${explicit}`,
+      artworkUrl: artworkUrl,
+      isrc: track.externalIds?.isrc || null,
+    };
+  } catch (error) {
+    if (error.statusCode === 404) throw error;
+    log("Internal track fetch failed:", error.message);
+    throw httpError(502, `Failed to fetch track: ${error.message}`);
+  }
+}
+
+async function fetchSimilarTracks(rawUrl, limit) {
+  const trackId = parseSpotifyUrl(rawUrl, "track");
+  try {
+    const data = await spotifyInternalApi(GRAPHQL_QUERIES.getSimilarTracks, {
+      uri: `spotify:track:${trackId}`,
+      limit: Number(limit) || 10
+    });
+
+    const items = data?.seoRecommendedTrack?.items || [];
+    const tracks = items.map(item => mapInternalTrack(item.data)).filter(Boolean);
+
+    return {
+      name: `Similar Tracks for ${trackId}`,
+      tracks: tracks,
+      trackCount: tracks.length
+    };
+  } catch (error) {
+    if (error.statusCode === 404) throw error;
+    log("Internal similar tracks fetch failed:", error.message);
+    throw httpError(502, `Failed to fetch similar tracks: ${error.message}`);
+  }
+}
+
+async function fetchSimilarAlbums(rawUrl, limit) {
+  const trackId = parseSpotifyUrl(rawUrl, "track");
+  try {
+    const data = await spotifyInternalApi(GRAPHQL_QUERIES.getSimilarAlbums, {
+      uri: `spotify:track:${trackId}`,
+      limit: Number(limit) || 10,
+      albumsOnly: true
+    });
+
+    const items = data?.seoRecommendedTrackAlbum?.items || [];
+    const albums = items.map(item => {
+      const d = item.data;
+      if (!d) return null;
+      const id = d.uri ? d.uri.split(":").pop() : null;
+      return {
+        title: d.name || "Unknown Album",
+        identifier: id,
+        uri: d.uri,
+        url: id ? `https://open.spotify.com/album/${id}` : null,
+        artworkUrl: d.coverArt?.sources?.[0]?.url || null,
+        year: d.date?.year || null,
+        author: d.artists?.items?.map(a => a.profile?.name).join(", ") || null
+      };
+    }).filter(Boolean);
+
+    return {
+      name: `Similar Albums for ${trackId}`,
+      albums: albums,
+      albumCount: albums.length
+    };
+  } catch (error) {
+    if (error.statusCode === 404) throw error;
+    log("Internal similar albums fetch failed:", error.message);
+    throw httpError(502, `Failed to fetch similar albums: ${error.message}`);
+  }
+}
+
 async function fetchPlaylist(rawUrl) {
   const playlistId = parseSpotifyUrl(rawUrl, "playlist");
   const internal = await fetchPlaylistInternal(playlistId);
@@ -695,7 +810,7 @@ async function fetchArtistDiscography(rawUrl, offset = 0, limit = 50, noLimit = 
   if (noLimit) {
     let allReleases = [];
     let currentOffset = 0;
-    const fetchLimit = 100; // Efficient chunk size
+    const fetchLimit = 100;
 
     while (true) {
       const page = await fetchArtistDiscographyInternal(artistId, currentOffset, fetchLimit);
@@ -970,7 +1085,13 @@ async function handleRequest(req, res) {
   }
 
   let response;
-  if (url.pathname === "/api/playlist") {
+  if (url.pathname === "/api/track") {
+    response = await fetchTrack(getRequiredParam(url, "url"));
+  } else if (url.pathname === "/api/similar-tracks") {
+    response = await fetchSimilarTracks(getRequiredParam(url, "url"), url.searchParams.get("limit") || 10);
+  } else if (url.pathname === "/api/similar-albums") {
+    response = await fetchSimilarAlbums(getRequiredParam(url, "url"), url.searchParams.get("limit") || 10);
+  } else if (url.pathname === "/api/playlist") {
     response = await fetchPlaylist(getRequiredParam(url, "url"));
   } else if (url.pathname === "/api/album") {
     response = await fetchAlbum(getRequiredParam(url, "url"));
