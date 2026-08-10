@@ -497,7 +497,7 @@ async function fetchTrackInternal(trackId) {
     const albumName = track.albumOfTrack?.name || track.album?.name || null;
     const albumId = track.albumOfTrack?.id || track.album?.id || null;
     let artworkUrl = track.albumOfTrack?.coverArt?.sources?.[0]?.url || track.album?.images?.[0]?.url || null;
-    
+
     if (!artworkUrl && track.coverArt?.sources?.[0]?.url) {
       artworkUrl = track.coverArt.sources[0].url;
     }
@@ -940,7 +940,7 @@ async function fetchHome(timeZone = "Asia/Calcutta") {
           identifier: id,
           uri: d.uri || null,
           url: url,
-          artworkUrl: d.albumOfTrack?.coverArt?.sources?.[0]?.url || d.coverArt?.sources?.[0]?.url || d.images?.[0]?.url || d.visuals?.avatarImage?.sources?.[0]?.url || null,
+          artworkUrl: d.albumOfTrack?.coverArt?.sources?.[0]?.url || d.coverArt?.sources?.[0]?.url || d.images?.items?.[0]?.sources?.[0]?.url || d.images?.[0]?.sources?.[0]?.url || d.images?.[0]?.url || d.visuals?.avatarImage?.sources?.[0]?.url || null,
         };
       }).filter(Boolean);
 
