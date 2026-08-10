@@ -6,13 +6,14 @@ The project is designed to run locally as a plain Node HTTP server and to deploy
 
 ## What This Project Does
 
-This API exposes five endpoints:
+This API exposes six endpoints:
 
 ```text
 GET /api/search?query=<search-term>
 GET /api/album?url=<spotify-album-url>
 GET /api/playlist?url=<spotify-playlist-url>
 GET /api/user-playlists?userId=<spotify-user-id>
+GET /api/home
 GET /api/status
 ```
 
@@ -73,6 +74,7 @@ This gives better behavior for many common playlist and search requests while ke
 |   |-- playlist.js
 |   |-- status.js
 |   |-- search.js
+|   |-- home.js
 |   `-- user-playlists.js
 |-- LICENSE
 |-- readme.md
@@ -129,6 +131,7 @@ http://localhost:8080/api/search?query=daft%20punk
 http://localhost:8080/api/album?url=https%3A%2F%2Fopen.spotify.com%2Falbum%2F4m2880jivSbbyEGAKfITCa
 http://localhost:8080/api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
 http://localhost:8080/api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
+http://localhost:8080/api/home
 http://localhost:8080/api/status
 ```
 
@@ -145,6 +148,7 @@ Deploy it as a normal Vercel project. Vercel will use the files inside `api/` as
 /api/album
 /api/playlist
 /api/user-playlists
+/api/home
 /api/status
 ```
 
@@ -155,6 +159,7 @@ https://your-project.vercel.app/api/search?query=daft%20punk
 https://your-project.vercel.app/api/album?url=<encoded-spotify-album-url>
 https://your-project.vercel.app/api/playlist?url=<encoded-spotify-playlist-url>
 https://your-project.vercel.app/api/user-playlists?userId=<spotify-user-id>
+https://your-project.vercel.app/api/home
 https://your-project.vercel.app/api/status
 ```
 
@@ -226,6 +231,22 @@ Example:
 
 ```text
 /api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
+```
+
+### Home
+
+```text
+GET /api/home
+```
+
+Fetches the Spotify home page.
+
+This returns sections such as "Recently played", "Made for You", or "Trending" populated by Spotify's internal Pathfinder API for anonymous tokens.
+
+Example:
+
+```text
+/api/home
 ```
 
 ### Status

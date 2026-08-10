@@ -31,6 +31,10 @@ const GRAPHQL_QUERIES = {
     name: "searchDesktop",
     hash: "fcad5a3e0d5af727fb76966f06971c19cfa2275e6ff7671196753e008611873c",
   },
+  getHome: {
+    name: "home",
+    hash: "76243c78b0e20ecdbe41b794dec8cbe73f75e585b0a7201b8d2e84578412847a",
+  },
 };
 
 let cachedToken = null;
@@ -321,7 +325,7 @@ async function spotifyInternalApi(operation, variables) {
     headers: {
       "authorization": `Bearer ${token}`,
       "accept": "application/json",
-      "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+      "accept-language": "en",
       "app-platform": "WebPlayer",
       "content-type": "application/json; charset=utf-8",
       "origin": "https://open.spotify.com/",
@@ -656,6 +660,49 @@ async function fetchUserPlaylists(userId) {
   };
 }
 
+async function fetchHome(timeZone = "Asia/Calcutta") {
+  try {
+    const data = await spotifyInternalApi(GRAPHQL_QUERIES.getHome, {
+      timeZone: timeZone,
+      facet: "",
+      sectionItemsLimit: 10,
+      homeEndUserIntegration: "INTEGRATION_WEB_PLAYER",
+      includeEpisodeContentRatingsV2: true,
+      sp_t: crypto.randomUUID()
+    });
+
+    const greeting = data?.home?.greeting?.transformedLabel || data?.home?.greeting?.translatedBaseText || "Welcome";
+    const items = data?.home?.sectionContainer?.sections?.items || [];
+    const sections = items.map(s => {
+      const title = s.data?.title?.transformedLabel || s.data?.title?.translatedBaseText || "Untitled Section";
+      const sectionItems = (s.sectionItems?.items || []).map(i => {
+        const d = i.content?.data;
+        if (!d) return null;
+        
+        let id = d.uri ? d.uri.split(":").pop() : null;
+        let type = d.__typename || "Unknown";
+        let url = id && type !== "Unknown" ? `https://open.spotify.com/${type.toLowerCase()}/${id}` : null;
+        
+        return {
+          title: d.name || d.profile?.name || "Unknown",
+          type: type,
+          identifier: id,
+          uri: d.uri || null,
+          url: url,
+          artworkUrl: d.albumOfTrack?.coverArt?.sources?.[0]?.url || d.coverArt?.sources?.[0]?.url || d.images?.[0]?.url || d.visuals?.avatarImage?.sources?.[0]?.url || null,
+        };
+      }).filter(Boolean);
+      
+      return { title, items: sectionItems };
+    });
+    
+    return { name: "Spotify Home", greeting, sections };
+  } catch (error) {
+    log("Internal home fetch failed:", error.message);
+    throw httpError(502, `Failed to fetch home page: ${error.message}`);
+  }
+}
+
 function withTrackCount(collection) {
   return {
     ...collection,
@@ -795,6 +842,8 @@ async function handleRequest(req, res) {
     response = await searchTracks(getRequiredParam(url, "query"));
   } else if (url.pathname === "/api/user-playlists") {
     response = await fetchUserPlaylists(getRequiredParam(url, "userId"));
+  } else if (url.pathname === "/api/home") {
+    response = await fetchHome(url.searchParams.get("timeZone") || "Asia/Calcutta");
   } else if (url.pathname === "/api/status") {
     response = {
       status: "OK",
