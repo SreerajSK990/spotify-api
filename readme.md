@@ -6,13 +6,15 @@ The project is designed to run locally as a plain Node HTTP server and to deploy
 
 ## What This Project Does
 
-This API exposes six endpoints:
+This API exposes eight endpoints:
 
 ```text
 GET /api/search?query=<search-term>
 GET /api/album?url=<spotify-album-url>
 GET /api/playlist?url=<spotify-playlist-url>
 GET /api/user-playlists?userId=<spotify-user-id>
+GET /api/artist?url=<spotify-artist-url>
+GET /api/artist-discography?url=<spotify-artist-url>[&nolimit=true]
 GET /api/home
 GET /api/status
 ```
@@ -70,6 +72,8 @@ This gives better behavior for many common playlist and search requests while ke
 .
 |-- api/
 |   |-- album.js
+|   |-- artist.js
+|   |-- artist-discography.js
 |   |-- index.js
 |   |-- playlist.js
 |   |-- status.js
@@ -131,6 +135,8 @@ http://localhost:8080/api/search?query=daft%20punk
 http://localhost:8080/api/album?url=https%3A%2F%2Fopen.spotify.com%2Falbum%2F4m2880jivSbbyEGAKfITCa
 http://localhost:8080/api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
 http://localhost:8080/api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
+http://localhost:8080/api/artist?url=https%3A%2F%2Fopen.spotify.com%2Fartist%2F1wRPtKGflJrBx9BmLsSwlU
+http://localhost:8080/api/artist-discography?url=https%3A%2F%2Fopen.spotify.com%2Fartist%2F1wRPtKGflJrBx9BmLsSwlU&nolimit=true
 http://localhost:8080/api/home
 http://localhost:8080/api/status
 ```
@@ -148,6 +154,8 @@ Deploy it as a normal Vercel project. Vercel will use the files inside `api/` as
 /api/album
 /api/playlist
 /api/user-playlists
+/api/artist
+/api/artist-discography
 /api/home
 /api/status
 ```
@@ -159,6 +167,8 @@ https://your-project.vercel.app/api/search?query=daft%20punk
 https://your-project.vercel.app/api/album?url=<encoded-spotify-album-url>
 https://your-project.vercel.app/api/playlist?url=<encoded-spotify-playlist-url>
 https://your-project.vercel.app/api/user-playlists?userId=<spotify-user-id>
+https://your-project.vercel.app/api/artist?url=<encoded-spotify-artist-url>
+https://your-project.vercel.app/api/artist-discography?url=<encoded-spotify-artist-url>
 https://your-project.vercel.app/api/home
 https://your-project.vercel.app/api/status
 ```
@@ -231,6 +241,34 @@ Example:
 
 ```text
 /api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
+```
+
+### Artist
+
+```text
+GET /api/artist?url=<spotify-artist-url>
+```
+
+Fetches an artist's profile, including their name, biography, listener counts, followers, profile images, and top tracks.
+
+Example:
+
+```text
+/api/artist?url=https%3A%2F%2Fopen.spotify.com%2Fartist%2F1wRPtKGflJrBx9BmLsSwlU
+```
+
+### Artist Discography
+
+```text
+GET /api/artist-discography?url=<spotify-artist-url>[&nolimit=true]
+```
+
+Fetches the complete release catalog for an artist, including albums, singles, and compilations. By default, it returns 50 items. Pass `&nolimit=true` to recursively fetch the entire discography. The returned URLs can be passed into the `/api/album` endpoint to fetch the tracks.
+
+Example:
+
+```text
+/api/artist-discography?url=https%3A%2F%2Fopen.spotify.com%2Fartist%2F1wRPtKGflJrBx9BmLsSwlU&nolimit=true
 ```
 
 ### Home

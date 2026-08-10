@@ -27,6 +27,14 @@ const GRAPHQL_QUERIES = {
     name: "fetchPlaylist",
     hash: "bb67e0af06e8d6f52b531f97468ee4acd44cd0f82b988e15c2ea47b1148efc77",
   },
+  getArtist: {
+    name: "queryArtistOverview",
+    hash: "ae0e2958a4ab645b35ca19ac04d0495ae12d9c5d7b7286217674801a9aab281a",
+  },
+  getArtistDiscography: {
+    name: "queryArtistDiscographyAll",
+    hash: "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599",
+  },
   searchDesktop: {
     name: "searchDesktop",
     hash: "fcad5a3e0d5af727fb76966f06971c19cfa2275e6ff7671196753e008611873c",
@@ -345,15 +353,23 @@ async function spotifyInternalApi(operation, variables) {
 }
 
 function parseSpotifyUrl(rawUrl, expectedType) {
+  if (rawUrl.startsWith("spotify:")) {
+    const parts = rawUrl.split(":");
+    if (parts.length >= 3 && parts[1] === expectedType) {
+      const id = parts[2];
+      if (/^[A-Za-z0-9]{16,32}$/.test(id)) return id;
+    }
+  }
+
   let spotifyUrl;
   try {
     spotifyUrl = new URL(rawUrl);
   } catch {
-    throw httpError(400, "Invalid Spotify URL");
+    throw httpError(400, "Invalid Spotify URL or URI");
   }
 
   if (!/(^|\.)spotify\.com$/i.test(spotifyUrl.hostname)) {
-    throw httpError(400, "URL must be a spotify.com URL");
+    throw httpError(400, "URL must be a spotify.com URL or a valid spotify: URI");
   }
 
   const parts = spotifyUrl.pathname.split("/").filter(Boolean);
@@ -383,6 +399,8 @@ function mapTrack(track, fallbackArtworkUrl = null) {
     author: Array.isArray(track.artists)
       ? track.artists.map((artist) => artist.name).join(", ")
       : "",
+    albumName: track.album?.name || null,
+    albumId: track.album?.id || null,
     duration: track.duration_ms,
     identifier: track.id,
     uri: track.uri,
@@ -430,6 +448,8 @@ function mapInternalTrack(track, fallbackArtworkUrl = null) {
   return {
     title: track.name,
     author: internalTrackAuthor(track),
+    albumName: track.albumOfTrack?.name || track.album?.name || null,
+    albumId: track.albumOfTrack?.id || track.album?.id || null,
     duration:
       track.duration?.totalMilliseconds ||
       track.trackDuration?.totalMilliseconds ||
@@ -627,6 +647,122 @@ async function fetchAlbumInternal(albumId) {
   return { name, tracks };
 }
 
+async function fetchArtist(rawUrl) {
+  const artistId = parseSpotifyUrl(rawUrl, "artist");
+  return fetchArtistInternal(artistId);
+}
+
+async function fetchArtistInternal(artistId) {
+  try {
+    const data = await spotifyInternalApi(GRAPHQL_QUERIES.getArtist, {
+      uri: `spotify:artist:${artistId}`,
+      locale: "",
+      includePrerelease: true,
+    });
+
+    const artist = data?.artistUnion;
+    if (!artist || artist.__typename === "NotFound") {
+      throw httpError(404, "Artist not found");
+    }
+
+    const profile = artist.profile || {};
+    const visuals = artist.visuals || {};
+    const stats = artist.stats || {};
+
+    const mapped = {
+      name: profile.name || "Unknown Artist",
+      biography: profile.biography?.text || null,
+      monthlyListeners: stats.monthlyListeners || 0,
+      followers: stats.followers || 0,
+      verified: profile.verified || false,
+      headerImageUrl: visuals.headerImage?.sources?.[0]?.url || null,
+      avatarImageUrl: visuals.avatarImage?.sources?.[0]?.url || null,
+      topTracks: (artist.discography?.topTracks?.items || []).map(item => {
+        return mapInternalTrack(item.track);
+      }).filter(Boolean)
+    };
+
+    return mapped;
+  } catch (error) {
+    if (error.statusCode === 404) throw error;
+    log("Internal artist fetch failed:", error.message);
+    throw httpError(502, `Failed to fetch artist: ${error.message}`);
+  }
+}
+
+async function fetchArtistDiscography(rawUrl, offset = 0, limit = 50, noLimit = false) {
+  const artistId = parseSpotifyUrl(rawUrl, "artist");
+  if (noLimit) {
+    let allReleases = [];
+    let currentOffset = 0;
+    const fetchLimit = 100; // Efficient chunk size
+
+    while (true) {
+      const page = await fetchArtistDiscographyInternal(artistId, currentOffset, fetchLimit);
+      allReleases = allReleases.concat(page.releases);
+
+      if (allReleases.length >= page.totalCount || page.releases.length === 0) {
+        return {
+          name: page.name,
+          releases: allReleases,
+          totalCount: page.totalCount,
+        };
+      }
+      currentOffset += fetchLimit;
+    }
+  }
+
+  return fetchArtistDiscographyInternal(artistId, Number(offset), Number(limit));
+}
+
+async function fetchArtistDiscographyInternal(artistId, offset, limit) {
+  try {
+    const data = await spotifyInternalApi(GRAPHQL_QUERIES.getArtistDiscography, {
+      uri: `spotify:artist:${artistId}`,
+      offset: offset,
+      limit: limit,
+      order: "DATE_DESC"
+    });
+
+    const artist = data?.artistUnion;
+    if (!artist || artist.__typename === "NotFound") {
+      throw httpError(404, "Artist not found");
+    }
+
+    const items = artist.discography?.all?.items || [];
+    const mappedReleases = [];
+
+    for (const item of items) {
+      const releases = item.releases?.items || [];
+      for (const release of releases) {
+        mappedReleases.push({
+          id: release.id,
+          name: release.name,
+          uri: release.uri,
+          url: `https://open.spotify.com/album/${release.id}`,
+          type: release.type,
+          trackCount: release.tracks?.totalCount || 0,
+          date: release.date?.isoString || null,
+          year: release.date?.year || null,
+          artworkUrl: release.coverArt?.sources?.[0]?.url || null,
+        });
+      }
+    }
+
+    return {
+      name: `Discography for Artist: ${artistId}`,
+      releases: mappedReleases,
+      totalCount: artist.discography?.all?.totalCount || mappedReleases.length,
+      offset: offset,
+      limit: limit
+    };
+  } catch (error) {
+    if (error.statusCode === 404) throw error;
+    log("Internal artist discography fetch failed:", error.message);
+    throw httpError(502, `Failed to fetch artist discography: ${error.message}`);
+  }
+}
+
 async function fetchUserPlaylists(userId) {
   const token = await getAccessToken();
   const url = `https://spclient.wg.spotify.com/user-profile-view/v3/profile/${encodeURIComponent(userId)}?playlist_limit=100&artist_limit=0&episode_limit=0&market=US`;
@@ -678,11 +814,11 @@ async function fetchHome(timeZone = "Asia/Calcutta") {
       const sectionItems = (s.sectionItems?.items || []).map(i => {
         const d = i.content?.data;
         if (!d) return null;
-        
+
         let id = d.uri ? d.uri.split(":").pop() : null;
         let type = d.__typename || "Unknown";
         let url = id && type !== "Unknown" ? `https://open.spotify.com/${type.toLowerCase()}/${id}` : null;
-        
+
         return {
           title: d.name || d.profile?.name || "Unknown",
           type: type,
@@ -692,10 +828,10 @@ async function fetchHome(timeZone = "Asia/Calcutta") {
           artworkUrl: d.albumOfTrack?.coverArt?.sources?.[0]?.url || d.coverArt?.sources?.[0]?.url || d.images?.[0]?.url || d.visuals?.avatarImage?.sources?.[0]?.url || null,
         };
       }).filter(Boolean);
-      
+
       return { title, items: sectionItems };
     });
-    
+
     return { name: "Spotify Home", greeting, sections };
   } catch (error) {
     log("Internal home fetch failed:", error.message);
@@ -838,6 +974,15 @@ async function handleRequest(req, res) {
     response = await fetchPlaylist(getRequiredParam(url, "url"));
   } else if (url.pathname === "/api/album") {
     response = await fetchAlbum(getRequiredParam(url, "url"));
+  } else if (url.pathname === "/api/artist") {
+    response = await fetchArtist(getRequiredParam(url, "url"));
+  } else if (url.pathname === "/api/artist-discography") {
+    response = await fetchArtistDiscography(
+      getRequiredParam(url, "url"),
+      url.searchParams.get("offset") || 0,
+      url.searchParams.get("limit") || 50,
+      url.searchParams.has("nolimit") || url.searchParams.get("nolimit") === "true"
+    );
   } else if (url.pathname === "/api/search") {
     response = await searchTracks(getRequiredParam(url, "query"));
   } else if (url.pathname === "/api/user-playlists") {
