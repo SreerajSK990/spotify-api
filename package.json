@@ -28,12 +28,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sreerajs/spotify-api.git"
+    "url": "https://github.com/SreerajSK990/spotify-api.git"
   },
   "bugs": {
-    "url": "https://github.com/sreerajs/spotify-api/issues"
+    "url": "https://github.com/SreerajSK990/spotify-api/issues"
   },
-  "homepage": "https://github.com/sreerajs/spotify-api#readme",
+  "homepage": "https://github.com/SreerajSK990/spotify-api#readme",
   "engines": {
     "node": ">=18.0.0"
   },
