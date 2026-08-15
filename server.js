@@ -891,26 +891,42 @@ async function fetchUserPlaylists(userId) {
   });
 
   const rawPlaylists = data.public_playlists || [];
-  const playlists = rawPlaylists.map(p => {
+  const playlists = [];
+
+  for (const p of rawPlaylists) {
     const id = (p.uri || "").replace("spotify:playlist:", "");
     let artworkUrl = p.image_url || null;
+    let trackCount = 0;
 
-    return {
+    try {
+      const pData = await spotifyInternalApi(GRAPHQL_QUERIES.getPlaylist, {
+        uri: `spotify:playlist:${id}`,
+        offset: 0,
+        limit: 1,
+        enableWatchFeedEntrypoint: false,
+      });
+      trackCount = pData?.playlistV2?.content?.totalCount || 0;
+    } catch (err) {
+      log(`Failed to fetch track count for playlist ${id}: ${err.message}`);
+    }
+
+    playlists.push({
       name: p.name,
       identifier: id,
       uri: p.uri,
       url: `https://open.spotify.com/playlist/${id}`,
-      artworkUrl
-    };
-  });
+      artworkUrl,
+      trackCount
+    });
+  }
 
   return {
     name: `Spotify Playlists for User: ${userId}`,
     displayName: data.name || null,
     userId: data.uri ? data.uri.replace("spotify:user:", "") : userId,
     avatarUrl: data.image_url || null,
-    followers: data.followers_count || 0,
-    following: data.following_count || 0,
+    followersCount: data.followers_count || 0,
+    followingCount: data.following_count || 0,
     playlists,
     playlistCount: playlists.length
   };
