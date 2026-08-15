@@ -906,6 +906,9 @@ async function fetchUserPlaylists(userId) {
 
   return {
     name: `Spotify Playlists for User: ${userId}`,
+    displayName: data.name || null,
+    userId: data.uri ? data.uri.replace("spotify:user:", "") : userId,
+    avatarUrl: data.image_url || null,
     playlists,
     playlistCount: playlists.length
   };
@@ -1156,7 +1159,6 @@ if (require.main === module) {
     log(`Spotify API server listening on http://localhost:${PORT}`);
   });
 }
-
 module.exports = {
   createServer,
   handleRequest,
