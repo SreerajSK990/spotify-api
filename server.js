@@ -909,6 +909,8 @@ async function fetchUserPlaylists(userId) {
     displayName: data.name || null,
     userId: data.uri ? data.uri.replace("spotify:user:", "") : userId,
     avatarUrl: data.image_url || null,
+    followers: data.followers_count || 0,
+    following: data.following_count || 0,
     playlists,
     playlistCount: playlists.length
   };
