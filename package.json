@@ -1,0 +1,46 @@
+{
+  "name": "spotify-anonymous-api",
+  "version": "1.0.0",
+  "description": "A zero-dependency Node.js API that resolves Spotify metadata without official client credentials. Uses anonymous web-player token generation to query Spotify's internal GraphQL and public REST APIs.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "spotify",
+    "spotify-api",
+    "music-api",
+    "metadata",
+    "graphql",
+    "anonymous",
+    "totp",
+    "playlist",
+    "album",
+    "artist",
+    "track",
+    "search",
+    "nodejs",
+    "serverless",
+    "vercel"
+  ],
+  "author": "SreerajSK990",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SreerajSK990/spotify-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SreerajSK990/spotify-api/issues"
+  },
+  "homepage": "https://github.com/SreerajSK990/spotify-api#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "server.js",
+    "api/",
+    "LICENSE",
+    "readme.md"
+  ]
+}

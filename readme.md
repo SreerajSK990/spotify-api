@@ -1,408 +1,496 @@
+<div align="center">
+
 # Spotify Anonymous API
 
-A small Node.js API for resolving Spotify search results, playlists, and albums without using official Spotify client credentials.
+**A zero-dependency Node.js API that resolves Spotify metadata without official client credentials.**
 
-The project is designed to run locally as a plain Node HTTP server and to deploy on Vercel as serverless API routes. It uses Spotify web-player style anonymous token generation, then calls Spotify internal and public metadata endpoints to return a simple normalized track list.
+Built for projects that need fast, anonymous access to Spotify track, album, playlist, and artist data.
 
-## What This Project Does
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)
+![Deploy](https://img.shields.io/badge/deploy-Vercel-black)
 
-This API exposes eleven endpoints:
+[Live Demo](https://spotify-api-lime-xi.vercel.app) | [Report Issue](https://github.com/knownasrazi/spotify-api/issues)
 
-```text
-GET /api/search?query=<search-term>
-GET /api/track?url=<spotify-track-url>
-GET /api/similar-tracks?url=<spotify-track-url>[&limit=10]
-GET /api/similar-albums?url=<spotify-track-url>[&limit=10]
-GET /api/album?url=<spotify-album-url>
-GET /api/playlist?url=<spotify-playlist-url>
-GET /api/user-playlists?userId=<spotify-user-id>
-GET /api/artist?url=<spotify-artist-url>
-GET /api/artist-discography?url=<spotify-artist-url>[&nolimit=true]
-GET /api/home
-GET /api/status
+</div>
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [How It Works](#how-it-works)
+- [Quick Start](#quick-start)
+- [Deployment](#deployment)
+- [API Reference](#api-reference)
+- [Architecture](#architecture)
+- [Configuration](#configuration)
+- [Error Handling](#error-handling)
+- [Limitations](#limitations)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Overview
+
+Spotify Anonymous API replicates the authentication flow of Spotify's web player to obtain anonymous access tokens. It then queries Spotify's internal GraphQL API (Pathfinder) and public Web API to return normalized, compact metadata — all without requiring official API credentials or user login.
+
+**Use cases:** Music discovery apps, playlist analytics, track metadata enrichment, discography crawlers, and any project that needs Spotify data without OAuth complexity.
+
+## Features
+
+- **Zero dependencies** — runs on Node.js built-ins only
+- **Anonymous auth** — no Spotify Developer app required
+- **Dual API strategy** — prefers internal GraphQL, falls back to public REST
+- **Full pagination** — playlists and albums load completely (no page cap)
+- **Rate limit handling** — automatic retry on short `Retry-After` windows
+- **ISRC enrichment** — album tracks include International Standard Recording Codes
+- **Local track filtering** — skips `spotify:local:` entries automatically
+- **CORS enabled** — ready for browser-based consumption
+- **Vercel-ready** — deploy with zero configuration
+
+## How It Works
+
+```
+Client Request
+      │
+      ▼
+┌─────────────────────┐
+│  TOTP Token Engine   │  Decode secrets → Generate HMAC-SHA1 TOTP
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│  Anonymous Token     │  POST to Spotify /api/token with web-player TOTP
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────┐
+│            Spotify APIs                      │
+│  1. Pathfinder GraphQL (primary)             │
+│  2. Public Web API (fallback)                │
+│  3. spclient API (user playlists)            │
+└─────────────────────────────────────────────┘
 ```
 
-Search returns JSON in a compact format:
+The server decodes obfuscated TOTP secrets (versions 59–61 hardcoded + remote latest), generates time-based codes, and exchanges them for anonymous access tokens. Tokens are cached in memory and refreshed 5 minutes before expiry.
 
+## Quick Start
+
+**Prerequisites:** Node.js 18+
+
+```bash
+# Clone the repository
+git clone https://github.com/knownasrazi/spotify-api.git
+cd spotify-api
+
+# Start the server
+node server.js
+```
+
+The API is now running at `http://localhost:8080`.
+
+### Try It Out
+
+```bash
+# Search for tracks
+curl "http://localhost:8080/api/search?query=daft+punk"
+
+# Get track metadata
+curl "http://localhost:8080/api/track?url=https://open.spotify.com/track/0yQKGjwHEcxZ2RQzLcFhyD"
+
+# Fetch a playlist
+curl "http://localhost:8080/api/playlist?url=https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+
+# Health check
+curl "http://localhost:8080/api/status"
+```
+
+## Deployment
+
+### Vercel (Recommended)
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+```
+
+The project is pre-configured for Vercel. Each file in `api/` becomes a serverless function with a 30-second timeout.
+
+### Docker
+
+```bash
+# Build the image
+docker build -t spotify-api .
+
+# Run the container
+docker run -d -p 8080:8080 --name spotify-api spotify-api
+```
+
+The API will be available at `http://localhost:8080`.
+
+**With docker-compose:**
+
+```yaml
+# docker-compose.yml
+services:
+  spotify-api:
+    build: .
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+```
+
+```bash
+docker compose up -d
+```
+
+### Other Platforms
+
+Any Node.js hosting works. Just run `node server.js`. The server listens on port `8080` by default (configurable via the `PORT` environment variable on supported platforms).
+
+## API Reference
+
+### Search Tracks
+
+```
+GET /api/search?query=<search-term>
+```
+
+Returns up to 10 matching tracks.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `query` | Yes | Search keyword(s) |
+
+**Response:**
 ```json
 {
   "name": "Spotify Search: daft punk",
   "tracks": [
     {
-      "title": "Get Lucky (feat. Pharrell Williams and Nile Rodgers)",
+      "title": "Get Lucky",
       "author": "Daft Punk, Pharrell Williams, Nile Rodgers",
+      "albumName": "Random Access Memories",
+      "albumId": "4m2880jivSbbyEGAKfITCa",
       "duration": 369626,
       "identifier": "69kOkLUCkxIZYexIgSG8rq",
       "uri": "https://open.spotify.com/track/69kOkLUCkxIZYexIgSG8rq?explicit=false",
       "artworkUrl": "https://i.scdn.co/image/...",
-      "isrc": null
+      "isrc": "USRC11300104"
     }
   ]
 }
 ```
 
-Playlist and album responses use the same `tracks` shape and also include `trackCount`:
+---
 
-```json
-{
-  "name": "Random Access Memories",
-  "tracks": [],
-  "trackCount": 13
-}
+### Get Track
+
 ```
-
-## How It Works
-
-The server does not use the official Spotify Client Credentials flow.
-
-Instead, it follows the behavior of Spotify's web player:
-
-1. Decode a known obfuscated TOTP secret.
-2. Generate a TOTP code with HMAC-SHA1.
-3. Request an anonymous Spotify web-player access token.
-4. Cache that token until close to expiry.
-5. Use the token to query Spotify metadata APIs.
-
-For playlist, album, and search resolution, the server prefers Spotify's internal Pathfinder GraphQL API first. If that fails, it falls back to Spotify's public Web API where possible.
-
-Playlist and album endpoints page through Spotify results until the collection is exhausted. There is no fixed five-page cap; the endpoint keeps requesting pages until Spotify returns no `next` page or the internal API reports that all items have been read.
-
-This gives better behavior for many common playlist and search requests while keeping the public response format simple.
-
-## Project Structure
-
-```text
-.
-|-- api/
-|   |-- album.js
-|   |-- artist.js
-|   |-- artist-discography.js
-|   |-- index.js
-|   |-- playlist.js
-|   |-- status.js
-|   |-- search.js
-|   |-- similar-albums.js
-|   |-- similar-tracks.js
-|   |-- home.js
-|   |-- track.js
-|   `-- user-playlists.js
-|-- LICENSE
-|-- readme.md
-|-- server.js
-`-- vercel.json
-```
-
-### `server.js`
-
-Contains the main implementation:
-
-- token generation
-- TOTP secret decoding
-- Spotify token caching
-- internal GraphQL requests
-- public Web API fallback
-- playlist parsing
-- album parsing
-- full playlist and album pagination
-- search parsing
-- local HTTP server support
-- Vercel-compatible request handler export
-
-### `api/*.js`
-
-These are Vercel serverless route entrypoints. They import the shared handler from `server.js`.
-
-### `vercel.json`
-
-Sets Vercel function configuration. The current configuration gives API routes up to 30 seconds to complete.
-
-## Running Locally
-
-No external npm packages are required.
-
-You only need Node.js 18 or newer.
-
-Run:
-
-```bash
-node server.js
-```
-
-The local server listens on:
-
-```text
-http://localhost:8080
-```
-
-Example requests:
-
-```text
-http://localhost:8080/api/search?query=daft%20punk
-http://localhost:8080/api/track?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD
-http://localhost:8080/api/similar-tracks?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD&limit=5
-http://localhost:8080/api/similar-albums?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD&limit=5
-http://localhost:8080/api/album?url=https%3A%2F%2Fopen.spotify.com%2Falbum%2F4m2880jivSbbyEGAKfITCa
-http://localhost:8080/api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
-http://localhost:8080/api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
-http://localhost:8080/api/artist?url=https%3A%2F%2Fopen.spotify.com%2Fartist%2F1wRPtKGflJrBx9BmLsSwlU
-http://localhost:8080/api/artist-discography?url=https%3A%2F%2Fopen.spotify.com%2Fartist%2F1wRPtKGflJrBx9BmLsSwlU&nolimit=true
-http://localhost:8080/api/home
-http://localhost:8080/api/status
-```
-
-When passing Spotify URLs as query parameters, URL-encode them.
-
-## Deploying to Vercel
-
-This folder is already shaped for Vercel.
-
-Deploy it as a normal Vercel project. Vercel will use the files inside `api/` as serverless functions:
-
-```text
-/api/search
-/api/track
-/api/similar-tracks
-/api/similar-albums
-/api/album
-/api/playlist
-/api/user-playlists
-/api/artist
-/api/artist-discography
-/api/home
-/api/status
-```
-
-After deployment, your requests will look like:
-
-```text
-https://your-project.vercel.app/api/search?query=daft%20punk
-https://your-project.vercel.app/api/track?url=<encoded-spotify-track-url>
-https://your-project.vercel.app/api/similar-tracks?url=<encoded-spotify-track-url>&limit=10
-https://your-project.vercel.app/api/similar-albums?url=<encoded-spotify-track-url>&limit=10
-https://your-project.vercel.app/api/album?url=<encoded-spotify-album-url>
-https://your-project.vercel.app/api/playlist?url=<encoded-spotify-playlist-url>
-https://your-project.vercel.app/api/user-playlists?userId=<spotify-user-id>
-https://your-project.vercel.app/api/artist?url=<encoded-spotify-artist-url>
-https://your-project.vercel.app/api/artist-discography?url=<encoded-spotify-artist-url>
-https://your-project.vercel.app/api/home
-https://your-project.vercel.app/api/status
-```
-
-No environment variables are required for the current implementation.
-
-## Endpoint Details
-
-### Search
-
-```text
-GET /api/search?query=<search-term>
-```
-
-Performs a Spotify track search and returns up to 10 tracks.
-
-Example:
-
-```text
-/api/search?query=daft%20punk
-```
-
-### Track
-
-```text
 GET /api/track?url=<spotify-track-url>
 ```
 
-Fetches detailed metadata for a single track, including duration, artwork, artists, and ISRC.
+Fetches detailed metadata for a single track.
 
-Example:
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `url` | Yes | Spotify track URL or URI |
 
-```text
-/api/track?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD
-```
+---
 
 ### Similar Tracks
 
-```text
+```
 GET /api/similar-tracks?url=<spotify-track-url>[&limit=10]
 ```
 
-Fetches recommended similar tracks based on a given track (like Spotify Radio). Returns up to the specified limit (default 10).
+Returns recommended tracks based on a seed track (like Spotify Radio).
 
-Example:
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `url` | Yes | — | Spotify track URL or URI |
+| `limit` | No | `10` | Max results (1–50) |
 
-```text
-/api/similar-tracks?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD&limit=5
-```
+---
 
 ### Similar Albums
 
-```text
+```
 GET /api/similar-albums?url=<spotify-track-url>[&limit=10]
 ```
 
-Fetches recommended similar albums based on a given track. Returns up to the specified limit (default 10).
+Returns recommended albums based on a seed track.
 
-Example:
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `url` | Yes | — | Spotify track URL or URI |
+| `limit` | No | `10` | Max results (1–50) |
 
-```text
-/api/similar-albums?url=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F0yQKGjwHEcxZ2RQzLcFhyD&limit=5
+---
+
+### Get Album
+
 ```
-
-### Album
-
-```text
 GET /api/album?url=<spotify-album-url>
 ```
 
-Fetches album metadata and tracks.
+Fetches album metadata and all tracks. Fully paginated — returns every track regardless of album size.
 
-The internal GraphQL path is tried first. If it does not return usable tracks, the server falls back to the public Web API.
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `url` | Yes | Spotify album URL or URI |
 
-The endpoint paginates until the full album has been loaded.
-
-Example:
-
-```text
-/api/album?url=https%3A%2F%2Fopen.spotify.com%2Falbum%2F4m2880jivSbbyEGAKfITCa
+**Response:**
+```json
+{
+  "name": "Random Access Memories",
+  "trackCount": 13,
+  "tracks": [...]
+}
 ```
 
-### Playlist
+---
 
-```text
+### Get Playlist
+
+```
 GET /api/playlist?url=<spotify-playlist-url>
 ```
 
-Fetches playlist metadata and tracks.
+Fetches playlist metadata and all tracks. Fully paginated. Local tracks and non-track items are automatically filtered out.
 
-The internal GraphQL path is tried first. If it does not return usable tracks, the server falls back to the public Web API.
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `url` | Yes | Spotify playlist URL or URI |
 
-The endpoint paginates until the full playlist has been loaded. Local tracks and non-track items are skipped because they do not map cleanly to Spotify track metadata.
-
-Example:
-
-```text
-/api/playlist?url=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F37i9dQZF1DXcBWIGoYBM5M
-```
+---
 
 ### User Playlists
 
-```text
+```
 GET /api/user-playlists?userId=<spotify-user-id>
 ```
 
-Fetches a user's public playlists.
+Fetches a user's public playlists via Spotify's spclient API.
 
-This endpoint utilizes Spotify's internal spclient API to bypass public Web API restrictions for anonymous tokens.
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `userId` | Yes | Spotify user ID |
 
-Example:
-
-```text
-/api/user-playlists?userId=316ndylmu6sebwsoxpe557lveywy
+**Response:**
+```json
+{
+  "name": "Spotify Playlists for User: 316ndylmu6sebwsoxpe557lveywy",
+  "playlistCount": 12,
+  "playlists": [
+    {
+      "name": "My Playlist",
+      "identifier": "37i9dQZF1DXcBWIGoYBM5M",
+      "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+      "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+      "artworkUrl": "https://i.scdn.co/image/..."
+    }
+  ]
+}
 ```
 
-### Artist
+---
 
-```text
+### Get Artist
+
+```
 GET /api/artist?url=<spotify-artist-url>
 ```
 
-Fetches an artist's profile, including their name, biography, listener counts, followers, profile images, and top tracks.
+Fetches artist profile including biography, listener counts, followers, and top tracks.
 
-Example:
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `url` | Yes | Spotify artist URL or URI |
 
-```text
-/api/artist?url=https%3A%2F%2Fopen.spotify.com%2Fartist%2F1wRPtKGflJrBx9BmLsSwlU
+**Response:**
+```json
+{
+  "name": "Daft Punk",
+  "biography": "...",
+  "monthlyListeners": 32456789,
+  "followers": 12345678,
+  "verified": true,
+  "headerImageUrl": "https://i.scdn.co/image/...",
+  "avatarImageUrl": "https://i.scdn.co/image/...",
+  "topTracks": [...]
+}
 ```
+
+---
 
 ### Artist Discography
 
-```text
-GET /api/artist-discography?url=<spotify-artist-url>[&nolimit=true]
+```
+GET /api/artist-discography?url=<spotify-artist-url>[&nolimit=true][&offset=0][&limit=50]
 ```
 
-Fetches the complete release catalog for an artist, including albums, singles, and compilations. By default, it returns 50 items. Pass `&nolimit=true` to recursively fetch the entire discography. The returned URLs can be passed into the `/api/album` endpoint to fetch the tracks.
+Fetches the full release catalog (albums, singles, compilations). Pass `nolimit=true` to recursively load everything.
 
-Example:
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `url` | Yes | — | Spotify artist URL or URI |
+| `nolimit` | No | `false` | Fetch entire discography |
+| `offset` | No | `0` | Pagination offset |
+| `limit` | No | `50` | Items per page |
 
-```text
-/api/artist-discography?url=https%3A%2F%2Fopen.spotify.com%2Fartist%2F1wRPtKGflJrBx9BmLsSwlU&nolimit=true
-```
+---
 
 ### Home
 
-```text
-GET /api/home
+```
+GET /api/home[?timeZone=<timezone>]
 ```
 
-Fetches the Spotify home page.
+Fetches personalized Spotify home page sections (Recently Played, Made for You, Trending, etc.).
 
-This returns sections such as "Recently played", "Made for You", or "Trending" populated by Spotify's internal Pathfinder API for anonymous tokens.
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `timeZone` | No | `Asia/Calcutta` | IANA timezone string |
 
-Example:
-
-```text
-/api/home
-```
+---
 
 ### Status
 
-```text
+```
 GET /api/status
 ```
 
-Returns `200 OK` with the current timestamp in Indian Standard Time.
+Health check endpoint. Returns current timestamp in IST.
 
-Example response:
-
+**Response:**
 ```json
 {
   "status": "OK",
-  "timestamp": "2026-07-01T22:15:30+05:30",
+  "timestamp": "2026-08-10T14:30:00+05:30",
   "timezone": "Asia/Kolkata",
   "offset": "+05:30"
 }
 ```
 
-## Error Responses
+---
 
-Errors are returned as JSON:
+## Architecture
+
+```
+spotify-api/
+├── api/                    # Vercel serverless route handlers
+│   ├── album.js            # GET /api/album
+│   ├── artist.js           # GET /api/artist
+│   ├── artist-discography.js  # GET /api/artist-discography
+│   ├── home.js             # GET /api/home
+│   ├── index.js            # GET /api (root)
+│   ├── playlist.js         # GET /api/playlist
+│   ├── search.js           # GET /api/search
+│   ├── similar-albums.js   # GET /api/similar-albums
+│   ├── similar-tracks.js   # GET /api/similar-tracks
+│   ├── status.js           # GET /api/status
+│   ├── track.js            # GET /api/track
+│   └── user-playlists.js   # GET /api/user-playlists
+├── server.js               # Core logic (token gen, routing, data mapping)
+├── package.json            # Project metadata and scripts
+├── vercel.json             # Vercel deployment config
+├── Dockerfile              # Docker container config
+├── .dockerignore           # Docker build exclusions
+├── endpoints.json          # Deployed endpoint reference
+├── LICENSE                 # MIT License
+└── readme.md
+```
+
+**Key design decisions:**
+- **Single-file core** — all business logic lives in `server.js` (1167 lines)
+- **Thin route handlers** — each `api/*.js` file is a 5-line wrapper
+- **No frameworks** — pure `http.createServer()` for local dev
+- **No dependencies** — zero `node_modules`
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | Local server port |
+
+No environment variables are required. All Spotify API secrets are embedded in the source or fetched at runtime from a public repository.
+
+## Error Handling
+
+All errors return JSON:
 
 ```json
 {
-  "error": "Missing required query parameter: query"
+  "error": "Error message describing what went wrong"
 }
 ```
 
-Common error cases:
+| Status | Meaning |
+|--------|---------|
+| `400` | Missing or invalid parameters |
+| `404` | Endpoint or resource not found |
+| `405` | Unsupported HTTP method |
+| `429` | Rate limited by Spotify (short retries handled automatically) |
+| `500` | Internal server error |
+| `502` | Upstream Spotify API failure |
 
-- missing `query`
-- missing `url`
-- invalid Spotify URL
-- unsupported HTTP method
-- Spotify token failure
-- upstream Spotify rate limit
-- upstream Spotify API error
+## Limitations
 
-## Important Notes
+- **No guaranteed uptime** — Spotify can change their internal API at any time
+- **Anonymous tokens only** — no user-specific data (playback, saved tracks, etc.)
+- **Serverless cold starts** — token cache may expire between invocations on Vercel
+- **Large playlist timeouts** — very large playlists may exceed the 30s Vercel limit
+- **No search filters** — currently limited to track search only
 
-This project depends on behavior used by Spotify's web player. That behavior can change without notice.
+## Future Improvements
 
-The anonymous token flow may stop working if Spotify rotates secrets, changes token validation, changes internal API requirements, or blocks requests from a deployment platform.
+<details>
+<summary>Click to expand potential features</summary>
 
-This project is best treated as a lightweight metadata resolver, not as a guaranteed long-term replacement for the official Spotify API.
+- [ ] **Package.json** — add project metadata, scripts (`npm start`, `npm test`)
+- [ ] **Album/Artist/Podcast search** — extend search to support `type=album,artist,podcast`
+- [ ] **Episode/Podcast support** — fetch podcast episode metadata
+- [ ] **Audio features** — track tempo, key, energy, danceability via internal API
+- [ ] **Batch track lookup** — accept multiple track IDs in a single request
+- [ ] **Rate limit headers** — expose `X-RateLimit-*` headers to consumers
+- [ ] **Response caching** — cache album/playlist responses to reduce Spotify calls
+- [ ] **Streaming audio URLs** — extract preview URLs from track metadata
+- [ ] **Market parameter** — allow consumers to specify a market for availability filtering
+- [ ] **TypeScript rewrite** — add type safety and auto-generated API docs
+- [ ] **Test suite** — add unit tests for token generation, URL parsing, and data mapping
+- [ ] **Docker support** — containerize for self-hosted deployments
+- [ ] **Rate limiting** — add consumer-side rate limiting to protect upstream
 
-For production systems where reliability and policy compliance matter, the official Spotify Web API with client credentials is the safer option.
+</details>
 
-## Vercel Considerations
+## Contributing
 
-Serverless functions are short-lived. The token cache is stored in memory, so it may be reused during warm invocations but should not be treated as permanent.
+Contributions are welcome. Please:
 
-This is acceptable for this API because the server can regenerate anonymous tokens when needed.
-
-The project avoids long waits on Spotify public API rate limits. If Spotify returns a short `Retry-After`, the server may retry briefly. Longer rate limits are returned to the caller instead of holding the Vercel function open for too long.
-
-Very large playlists can take longer to resolve because the API now loads every available page. Vercel functions are configured with a 30 second maximum duration, so extremely large playlists may still be limited by the deployment platform rather than by the code.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+**Built by [SreerajSK990](https://github.com/knownasrazi)**
+
+*If this project helps you, consider giving it a star.*
+
+</div>
