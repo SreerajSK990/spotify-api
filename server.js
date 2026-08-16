@@ -522,10 +522,11 @@ async function fetchTrackInternal(trackId) {
 
 async function fetchSimilarTracks(rawUrl, limit) {
   const trackId = parseSpotifyUrl(rawUrl, "track");
+  const parsedLimit = parseLimit(limit);
   try {
     const data = await spotifyInternalApi(GRAPHQL_QUERIES.getSimilarTracks, {
       uri: `spotify:track:${trackId}`,
-      limit: Number(limit) || 10
+      limit: parsedLimit
     });
 
     const items = data?.seoRecommendedTrack?.items || [];
@@ -545,10 +546,11 @@ async function fetchSimilarTracks(rawUrl, limit) {
 
 async function fetchSimilarAlbums(rawUrl, limit) {
   const trackId = parseSpotifyUrl(rawUrl, "track");
+  const parsedLimit = parseLimit(limit);
   try {
     const data = await spotifyInternalApi(GRAPHQL_QUERIES.getSimilarAlbums, {
       uri: `spotify:track:${trackId}`,
-      limit: Number(limit) || 10,
+      limit: parsedLimit,
       albumsOnly: true
     });
 
@@ -1051,13 +1053,23 @@ async function searchTracksInternal(query) {
 }
 
 function sendJson(res, statusCode, body) {
+  const corsHeaders = {
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-headers": "content-type",
+  };
+
+  if (statusCode === 204) {
+    res.writeHead(statusCode, corsHeaders);
+    res.end();
+    return;
+  }
+
   const payload = JSON.stringify(body);
   res.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(payload),
-    "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET, OPTIONS",
-    "access-control-allow-headers": "content-type",
+    ...corsHeaders,
   });
   res.end(payload);
 }
@@ -1068,6 +1080,19 @@ function getRequiredParam(url, name) {
     throw httpError(400, `Missing required query parameter: ${name}`);
   }
   return value;
+}
+
+function parseLimit(rawLimit, defaultLimit = 10, maxLimit = 50) {
+  if (rawLimit === null || rawLimit === undefined || rawLimit === "") {
+    return defaultLimit;
+  }
+
+  const limit = Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > maxLimit) {
+    throw httpError(400, `limit must be an integer between 1 and ${maxLimit}`);
+  }
+
+  return limit;
 }
 
 function getIstTimestamp(date = new Date()) {
@@ -1109,9 +1134,15 @@ async function handleRequest(req, res) {
   if (url.pathname === "/api/track") {
     response = await fetchTrack(getRequiredParam(url, "url"));
   } else if (url.pathname === "/api/similar-tracks") {
-    response = await fetchSimilarTracks(getRequiredParam(url, "url"), url.searchParams.get("limit") || 10);
+    response = await fetchSimilarTracks(
+      getRequiredParam(url, "url"),
+      url.searchParams.get("limit")
+    );
   } else if (url.pathname === "/api/similar-albums") {
-    response = await fetchSimilarAlbums(getRequiredParam(url, "url"), url.searchParams.get("limit") || 10);
+    response = await fetchSimilarAlbums(
+      getRequiredParam(url, "url"),
+      url.searchParams.get("limit")
+    );
   } else if (url.pathname === "/api/playlist") {
     response = await fetchPlaylist(getRequiredParam(url, "url"));
   } else if (url.pathname === "/api/album") {
@@ -1184,4 +1215,5 @@ module.exports = {
   decodeSecret,
   generateTotp,
   getAccessToken,
+  parseLimit,
 };
