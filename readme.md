@@ -342,9 +342,9 @@ Fetches the full release catalog (albums, singles, compilations). Pass `nolimit=
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `url` | Yes | — | Spotify artist URL or URI |
-| `nolimit` | No | `false` | Fetch entire discography |
-| `offset` | No | `0` | Pagination offset |
-| `limit` | No | `50` | Items per page |
+| `nolimit` | No | `false` | Fetch entire discography; accepts `true` or `false` |
+| `offset` | No | `0` | Non-negative pagination offset |
+| `limit` | No | `50` | Items per page (1–100) |
 
 ---
 
