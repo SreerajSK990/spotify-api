@@ -809,6 +809,8 @@ async function fetchArtistInternal(artistId) {
 
 async function fetchArtistDiscography(rawUrl, offset = 0, limit = 50, noLimit = false) {
   const artistId = parseSpotifyUrl(rawUrl, "artist");
+  const pagination = parseDiscographyPagination(offset, limit);
+
   if (noLimit) {
     let allReleases = [];
     let currentOffset = 0;
@@ -829,7 +831,11 @@ async function fetchArtistDiscography(rawUrl, offset = 0, limit = 50, noLimit = 
     }
   }
 
-  return fetchArtistDiscographyInternal(artistId, Number(offset), Number(limit));
+  return fetchArtistDiscographyInternal(
+    artistId,
+    pagination.offset,
+    pagination.limit
+  );
 }
 
 async function fetchArtistDiscographyInternal(artistId, offset, limit) {
@@ -1095,6 +1101,42 @@ function parseLimit(rawLimit, defaultLimit = 10, maxLimit = 50) {
   return limit;
 }
 
+function parseOffset(rawOffset, defaultOffset = 0) {
+  if (rawOffset === null || rawOffset === undefined || rawOffset === "") {
+    return defaultOffset;
+  }
+
+  const offset = Number(rawOffset);
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw httpError(400, "offset must be a non-negative integer");
+  }
+
+  return offset;
+}
+
+function parseDiscographyPagination(rawOffset, rawLimit) {
+  return {
+    offset: parseOffset(rawOffset),
+    limit: parseLimit(rawLimit, 50, 100),
+  };
+}
+
+function parseBooleanQueryParam(rawValue, defaultValue = false) {
+  if (rawValue === null || rawValue === undefined || rawValue === "") {
+    return defaultValue;
+  }
+
+  if (rawValue === "true") {
+    return true;
+  }
+
+  if (rawValue === "false") {
+    return false;
+  }
+
+  throw httpError(400, "nolimit must be either true or false");
+}
+
 function getIstTimestamp(date = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
@@ -1152,9 +1194,9 @@ async function handleRequest(req, res) {
   } else if (url.pathname === "/api/artist-discography") {
     response = await fetchArtistDiscography(
       getRequiredParam(url, "url"),
-      url.searchParams.get("offset") || 0,
-      url.searchParams.get("limit") || 50,
-      url.searchParams.has("nolimit") || url.searchParams.get("nolimit") === "true"
+      url.searchParams.get("offset"),
+      url.searchParams.get("limit"),
+      parseBooleanQueryParam(url.searchParams.get("nolimit"))
     );
   } else if (url.pathname === "/api/search") {
     response = await searchTracks(getRequiredParam(url, "query"));
@@ -1216,4 +1258,7 @@ module.exports = {
   generateTotp,
   getAccessToken,
   parseLimit,
+  parseOffset,
+  parseDiscographyPagination,
+  parseBooleanQueryParam,
 };

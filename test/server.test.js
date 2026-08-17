@@ -1,7 +1,13 @@
 const assert = require("node:assert/strict");
 const { after, before, describe, it } = require("node:test");
 
-const { createServer, parseLimit } = require("../server");
+const {
+  createServer,
+  parseBooleanQueryParam,
+  parseDiscographyPagination,
+  parseLimit,
+  parseOffset,
+} = require("../server");
 
 let server;
 let baseUrl;
@@ -44,6 +50,54 @@ describe("parseLimit", () => {
   });
 });
 
+describe("artist discography query parameters", () => {
+  it("parses the documented pagination defaults and bounds", () => {
+    assert.deepEqual(parseDiscographyPagination(null, null), {
+      offset: 0,
+      limit: 50,
+    });
+    assert.deepEqual(parseDiscographyPagination("10", "100"), {
+      offset: 10,
+      limit: 100,
+    });
+  });
+
+  it("rejects invalid offsets", () => {
+    for (const value of ["-1", "1.5", "abc"]) {
+      assert.throws(
+        () => parseOffset(value),
+        (error) =>
+          error.statusCode === 400 &&
+          error.message === "offset must be a non-negative integer"
+      );
+    }
+  });
+
+  it("rejects discography limits above the supported maximum", () => {
+    assert.throws(
+      () => parseDiscographyPagination("0", "101"),
+      (error) =>
+        error.statusCode === 400 &&
+        error.message === "limit must be an integer between 1 and 100"
+    );
+  });
+
+  it("accepts explicit nolimit booleans without treating false as true", () => {
+    assert.equal(parseBooleanQueryParam(null), false);
+    assert.equal(parseBooleanQueryParam("true"), true);
+    assert.equal(parseBooleanQueryParam("false"), false);
+  });
+
+  it("rejects invalid nolimit values", () => {
+    assert.throws(
+      () => parseBooleanQueryParam("yes"),
+      (error) =>
+        error.statusCode === 400 &&
+        error.message === "nolimit must be either true or false"
+    );
+  });
+});
+
 describe("HTTP behavior", () => {
   it("returns an empty 204 response for CORS preflight requests", async () => {
     const response = await fetch(baseUrl, { method: "OPTIONS" });
@@ -61,6 +115,17 @@ describe("HTTP behavior", () => {
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), {
       error: "limit must be an integer between 1 and 50",
+    });
+  });
+
+  it("rejects malformed discography pagination before calling Spotify", async () => {
+    const response = await fetch(
+      `${baseUrl}/api/artist-discography?url=spotify:artist:0du5cEVh5yTK9QJze8zA0C&offset=-1`
+    );
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "offset must be a non-negative integer",
     });
   });
 });
